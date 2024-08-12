@@ -1,27 +1,24 @@
-final class LED {
+struct LedStrip {
+    private let handle: led_strip_handle_t
     
-    var handle: led_strip_handle_t
-    
-    let maxLeds: UInt32
-    
-    init(maxLeds: UInt32) {
-        self.maxLeds = maxLeds
-        var handle: led_strip_handle_t?
-        init_led_strip(&handle, maxLeds)
-        self.handle = handle!
-    }
-    
-    func setPixel(index: Int, color: Color) {
-        switch color {
-        case .rgb(let r, let g, let b):
-            led_strip_set_pixel(handle, UInt32(index), r, g, b)
-        case .hsv(let h, let s, let v):
-            setPixel(index: index, color: hsvToRgb(h: Float(h), s: Float(s) / 255, v: Float(v) / 255))
+    init(gpioPin: Int, maxLeds: Int) {
+        var handle = led_strip_handle_t(bitPattern: 0)
+        var stripConfig = led_strip_config_t(
+            strip_gpio_num: Int32(gpioPin),
+            max_leds: UInt32(maxLeds),
+            led_pixel_format: LED_PIXEL_FORMAT_GRB,
+            led_model: LED_MODEL_WS2812,
+            flags: .init(invert_out: 0)
+        )
+        var spiConfig = led_strip_spi_config_t(
+            clk_src: SPI_CLK_SRC_DEFAULT,
+            spi_bus: SPI2_HOST,
+            flags: .init(with_dma: 1)
+        )
+        guard led_strip_new_spi_device(&stripConfig, &spiConfig, &handle) == ESP_OK else {
+            fatalError("cannot configure spi device")
         }
-    }
-    
-    func refresh() {
-        led_strip_refresh(handle)
+        self.handle = handle!
     }
     
     enum Color {
@@ -64,5 +61,22 @@ final class LED {
         default:
             return .rgb(UInt32(v * 255), UInt32(p * 255), UInt32(q * 255))
         }
+    }
+    
+    func setPixel(index: Int, color: Color) {
+        switch color {
+        case .rgb(let r, let g, let b):
+            led_strip_set_pixel(handle, UInt32(index), r, g, b)
+        case .hsv(let h, let s, let v):
+            setPixel(index: index, color: hsvToRgb(h: Float(h), s: Float(s) / 255, v: Float(v) / 255))
+        }
+    }
+    
+    func refresh() {
+        led_strip_refresh(handle)
+    }
+    
+    func clear() {
+        led_strip_clear(handle)
     }
 }
